@@ -1,10 +1,11 @@
 
 import streamlit as st
-from streamlit.components.v1 import components
+import streamlit.components.v1 as componentsx
 from pprint import pprint 
 from collections import defaultdict
 import numpy as np
 import pandas as pd
+from sklearn import metrics
 import regex as re
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -25,7 +26,6 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.datasets import load_iris
 from sklearn.metrics import confusion_matrix
 from matplotlib import pyplot
-from sklearn import metrics
 from sklearn.metrics import f1_score
 from sklearn.metrics import precision_score
 from sklearn.metrics import recall_score
@@ -40,7 +40,9 @@ from sklearn import tree
 from sklearn import svm
 import statsmodels.formula.api as smf
 from sklearn.tree import DecisionTreeRegressor
-
+from sklearn.metrics import RocCurveDisplay
+import random 
+from bokeh.plotting import figure
 
 
 st.markdown("""<h1>Preprocessing</h1>""", unsafe_allow_html=True)  
@@ -48,7 +50,7 @@ st.markdown("<br>",unsafe_allow_html=True)
 data = st.file_uploader(label="Upload dataset")
 if data is not None:
     try:
-        data = pd.read_csv(data)
+        data = pd.DataFrame(pd.read_csv(data, encoding="unicode_escape"))
     except:
         st.error("Can only receive inputs of .csv type")
         quit()
@@ -68,6 +70,10 @@ if data is not None:
         unsafe_allow_html=True)
         st.markdown(f"""<br>
         <a href=#model-results style="text-decoration: none;color: black;">Model Results</a>
+        """,
+        unsafe_allow_html=True)
+        st.markdown(f"""<br>
+        <a href=#dashboard style="text-decoration: none;color: black;">Dashboard</a>
         """,
         unsafe_allow_html=True)
         st.markdown(f"""<br>
@@ -119,6 +125,7 @@ if data is not None and "Churn" in data.columns and "customerID" in data.columns
     if len(data.columns) <= 2:
         st.warning("Data contains insufficient columns")
     else:
+        all_customer_ID = [i for i in data["customerID"]]
         st.markdown("Your input")
         st.dataframe(data)
 
@@ -156,9 +163,12 @@ if data is not None and "Churn" in data.columns and "customerID" in data.columns
                     st.write(variable)
                     st.write(data[variable].value_counts())
                 with col2:
-                    fig = plt.figure()
-                    data[variable].value_counts().plot(kind='bar')
-                    st.pyplot(fig)     
+                    #fig = plt.figure()
+                    #data[variable].value_counts().plot(kind='bar')
+                    #st.pyplot(fig) 
+                    st.markdown(variable)    
+                    st.bar_chart(pd.DataFrame(data[variable].value_counts())) 
+
                 
                 st.markdown("### Scatterplot for selected variable ###")
                 st.markdown("<br>",unsafe_allow_html=True)
@@ -175,7 +185,7 @@ if data is not None and "Churn" in data.columns and "customerID" in data.columns
                 plt.title(f"{y_scplt} vs {x_scplt}")
                 st.pyplot(fig)
                 
-                data = c.clean_data(data)
+                data = c.clean_data(data, True)
                 st.markdown("### Correlations between variables ###")
                 st.markdown("<br>",unsafe_allow_html=True)
                 col1, col2 = st.columns(2, gap = "large")
@@ -228,13 +238,15 @@ if data is not None and "Churn" in data.columns and "customerID" in data.columns
                 bestfeatures = c.feat_sel1(data, x, x_train, x_test, y_train, y_test)
                 model_by_Anova = bestfeatures[1]
                 bestfeatures = bestfeatures[0]
-                fig = plt.figure()
-                pyplot.bar([i for i in range(len(bestfeatures))], bestfeatures)
+                #fig = plt.figure()
+                #pyplot.bar([i for i in range(len(bestfeatures))], bestfeatures)
                 st.markdown("### Feature Selection ###")
                 st.markdown("<br>",unsafe_allow_html=True)
-                plt.title("ANOVA f-test Feature Selection")
-                st.pyplot(fig)
+                #plt.title("ANOVA f-test Feature Selection")
+                #st.pyplot(fig)
 
+                st.markdown("ANOVA f-test Feature Selection")    
+                st.bar_chart(pd.DataFrame(bestfeatures)) 
 
 
 
@@ -316,7 +328,8 @@ if data is not None and "Churn" in data.columns and "customerID" in data.columns
                     with col2:
                         st.markdown("ROC Curve")
                         #metrics.plot_roc_curve(cm_model[1], x_test, y_test)
-                        metrics.plot_roc_curve(all_models[0][1], x_test, y_test)
+                        #metrics.roc_curve(all_models[0][1], x_test, y_test)
+                        RocCurveDisplay.from_estimator(all_models[0][1], x_test, y_test)
                         st.set_option('deprecation.showPyplotGlobalUse', False)
                         st.pyplot()
                     with col3:
@@ -359,7 +372,8 @@ if data is not None and "Churn" in data.columns and "customerID" in data.columns
                     with col2:
                         st.markdown("ROC Curve")
                         #metrics.plot_roc_curve(cm_model[1], x_test, y_test)
-                        metrics.plot_roc_curve(all_models[1][1], x_test, y_test)
+                        #metrics.plot_roc_curve(all_models[1][1], x_test, y_test)
+                        RocCurveDisplay.from_estimator(all_models[1][1], x_test, y_test)
                         st.set_option('deprecation.showPyplotGlobalUse', False)
                         st.pyplot()
                     with col3:
@@ -400,7 +414,8 @@ if data is not None and "Churn" in data.columns and "customerID" in data.columns
                     with col2:
                         st.markdown("ROC Curve")
                        # metrics.plot_roc_curve(cm_model[1], x_test, y_test)
-                        metrics.plot_roc_curve(all_models[2][1], x_test, y_test)
+                        RocCurveDisplay.from_estimator(all_models[2][1], x_test, y_test)
+                        #metrics.plot_roc_curve(all_models[2][1], x_test, y_test)
                         st.set_option('deprecation.showPyplotGlobalUse', False)
                         st.pyplot()
                     with col3:
@@ -438,7 +453,8 @@ if data is not None and "Churn" in data.columns and "customerID" in data.columns
                         st.pyplot()
                     with col2:
                         st.markdown("ROC Curve")
-                        metrics.plot_roc_curve(all_models[3][1], x_test, y_test)
+                        RocCurveDisplay.from_estimator(all_models[3][1], x_test, y_test)
+                       # metrics.plot_roc_curve(all_models[3][1], x_test, y_test)
                         #metrics.plot_roc_curve(cm_model[1], x_test, y_test)
                         st.set_option('deprecation.showPyplotGlobalUse', False)
                         st.pyplot()
@@ -467,23 +483,68 @@ if data is not None and "Churn" in data.columns and "customerID" in data.columns
                 st.markdown(f"## {model_names[best_model_i]} is the model with the best model metrics")  
                 st.markdown("<br>",unsafe_allow_html=True)
 
+
+                st.markdown(f"# Dashboard")
+                classifier = all_classifiers[best_model_i]
+                predict_prob = classifier.predict_proba(data[model_by_Anova])
+                most_riskoc = list([i[1] for i in predict_prob])
+                st.markdown("<br>",unsafe_allow_html=True)
+                st.markdown(f"## The customer at most risk of churning is the customer with ID {all_customer_ID[most_riskoc.index(max(most_riskoc))]}")
+                #st.dataframe(data.iloc[most_riskoc.index(max(most_riskoc))])
+                st.markdown("<br>",unsafe_allow_html=True)  
+                cola, colb = st.columns(2, gap = "large")
+                with cola:
+                    st.markdown(f"### How churn differs between two variables")
+                    st.markdown("<br>",unsafe_allow_html=True)
+                    st.markdown("Select two variables for the plot")
+                    col1, col2 = st.columns(2, gap = "large")
+                    with col1:
+                        x_axis = st.radio("X_axis", model_by_Anova)
+                    with col2:
+                        y_axis = st.radio("Y_axis", model_by_Anova)
+                    st.markdown("<br>",unsafe_allow_html=True)
+                    fig = plt.figure()
+                    sns.set_theme(color_codes=True)
+                    #plot1 = sns.barplot(x="Dependents", y="Partner",  hue="Churn", data=vis_data)
+                    plot1 = sns.lmplot(x=x_axis, y=y_axis, markers=["o", "x"], hue="Churn", data=data)
+                    plt.title(f"{y_axis} vs {x_axis}")
+                    st.pyplot(plot1)
+                with colb:
+                    st.markdown(f"### Probability of churn amongst all customers")
+                    st.markdown("<br>",unsafe_allow_html=True)
+                    st.markdown(f"Probability of churn")
+                    st.bar_chart(predict_prob)
+
                 st.markdown(f"# Making predictions")
                 st.markdown("<br>",unsafe_allow_html=True)
                 new_data = st.file_uploader(label="Upload new dataset")
-                classifier = all_classifiers[best_model_i]
+                #st.write(best_model_i)
                 if new_data is not None:
                     try:
-                        new_data = pd.read_csv(new_data)
+                        new_data = pd.DataFrame(pd.read_csv(new_data, encoding="unicode_escape"))
                     except:
                         st.error("Can only receive inputs of .csv type")
                         quit()
-                    new_data = c.clean_data(new_data)
-                    churn_col = classifier.predict(new_data)
+                    st.markdown(f"Input")   
                     st.dataframe(new_data)
+                    new_data = c.clean_data(new_data, False)
+                    churn_col = classifier.predict(new_data[model_by_Anova])
                     new_data["Churn"] = churn_col
+                    st.markdown(f"Output")   
+                    st.dataframe(new_data)
+                    st.markdown("<br>",unsafe_allow_html=True)  
+                    st.markdown("<br>",unsafe_allow_html=True)
+                    #fig = plt.figure()
+                    #plt.title(f"Churn")
+                    #new_data["Churn"].value_counts().plot(kind='bar')
+                    #st.pyplot(fig)   
+                    st.markdown(f"Churn")  
+                    st.markdown("<br>",unsafe_allow_html=True)   
+                    st.bar_chart(pd.DataFrame(new_data["Churn"].value_counts())) 
+                    st.markdown("<br>",unsafe_allow_html=True)                
                     st.download_button(
-                        label="Download data as CSV",
-                        data=new_data,
+                        label="Download new data as .csv",
+                        data=new_data.to_csv(index=False).encode('utf-8'),
                         file_name='added_churn.csv',
                         mime='text/csv',
                     )
