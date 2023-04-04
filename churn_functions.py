@@ -1,3 +1,5 @@
+import streamlit as st
+import streamlit.components.v1 as componentsx
 from pprint import pprint 
 from collections import defaultdict
 import numpy as np
@@ -45,7 +47,7 @@ def vif_df(data):
     vif_df['VIF'] = [variance_inflation_factor(x.values, i) for i in range(x.shape[1])]
     return vif_df
 
-def clean_data(data):
+def clean_data(data, prev):
 
     # FIX
     check = []
@@ -53,7 +55,7 @@ def clean_data(data):
     string_formats = []
     for column in data:
         data[column].replace('(^[\s]+$|^$)', np.nan, inplace=True, regex=True)
-    #data = data.astype({'TotalCharges':'float64'})
+    data = data.astype({'TotalCharges':'float64'})
 
 
     # Check for heavily null columns and remove
@@ -62,7 +64,12 @@ def clean_data(data):
     for col in data.columns:
         if data[col].isna().sum() > num_rows / 2:
             to_remove.append(col)
+    try:
+        st.write(f"Column/s that exceed the given proportion of nulls (0.9) is/are {' '.split(to_remove)}")
+    except:
+        st.write("No column has excessive null entries by given threshold")
     data = data.drop(to_remove)
+    
 
     # Replace nulls that only appear once in a row with the mean of that column
     to_replace = {}
@@ -71,6 +78,7 @@ def clean_data(data):
         if (null_rows == 1):
             curr_row = [str(i) for i in list(row)]
             to_replace.update({index:  curr_row.index('nan')})
+    #st.write(to_replace)
     for i, j  in to_replace.items():
         data.iloc[[i], j] = data.loc[:, list(data.columns)[j]].mean()
     data = data.dropna()
@@ -124,6 +132,7 @@ def clean_data(data):
         else:
             for cols in outliers:
                 data.iloc[index][cols] = mean_of_cols[cols]
+    
     for id in to_remove:
         data = data[data.CustomerID != id]
     # Remove the first column in the dataset which corresponds with the customerID
@@ -132,14 +141,17 @@ def clean_data(data):
 
 
 
-
-
-    scaler = MinMaxScaler()
-    to_add = data['Churn']
-    sliced = data.loc[:, data.columns != 'Churn']
-    sliced = scaler.fit_transform(sliced)
-    data = pd.DataFrame(sliced, columns=data.columns[:-1], index=data.index)
-    data["Churn"] = to_add 
+    if prev == True:
+        scaler = MinMaxScaler()
+        to_add = data['Churn']
+        sliced = data.loc[:, data.columns != 'Churn']
+        sliced = scaler.fit_transform(sliced)
+        data = pd.DataFrame(sliced, columns=data.columns[:-1], index=data.index)
+        data["Churn"] = to_add 
+    else:
+        scaler = MinMaxScaler()
+        sliced = scaler.fit_transform(data)
+        data = pd.DataFrame(sliced, columns=data.columns, index=data.index)
 
     to_purge = []
     for column in data:
@@ -147,19 +159,27 @@ def clean_data(data):
         if len(val_dis) == 2:
             if min(val_dis) < 0.9 * max(val_dis):
                 to_purge.append(column)
+    try:
+        st.write(f"Column/s that exceed the given proportion of nulls (0.9) is/are {' '.split(to_purge)}")
+    except:
+        st.write("No column has excessive null entries by given threshold")
     data.drop(to_purge, axis=1)
 
 
 
-
-    model_string = ' + '.join(data.columns)
-    y, x = dmatrices(f'Churn ~ {model_string}', data=data, return_type = 'dataframe')
-    vif_df = pd.DataFrame()
-    vif_df['Variable'] = x.columns
-    vif_df['VIF'] = [variance_inflation_factor(x.values, i) for i in range(x.shape[1])]
-    high_vif = vif_df.loc[vif_df['VIF'] >= 10]
-    to_drop = [i for i in (high_vif['Variable']) if i != 'Intercept']
-    data.drop(to_drop, axis=1)
+    if prev == True:
+        model_string = ' + '.join(data.columns)
+        y, x = dmatrices(f'Churn ~ {model_string}', data=data, return_type = 'dataframe')
+        vif_df = pd.DataFrame()
+        vif_df['Variable'] = x.columns
+        vif_df['VIF'] = [variance_inflation_factor(x.values, i) for i in range(x.shape[1])]
+        high_vif = vif_df.loc[vif_df['VIF'] >= 10]
+        to_drop = [i for i in (high_vif['Variable']) if i != 'Intercept']
+        try:
+            st.write(f"Variable/s which exceed the given threshold VIF of 10 is/are {' '.split(to_drop)}")
+        except:
+            st.write("No variables exceed the given threshold VIF of 10")
+        data.drop(to_drop, axis=1)
 
     return data
 
@@ -169,6 +189,7 @@ def clean_data(data):
 def feat_sel1(data, x, x_train, x_test, y_train, y_test):
     # Checking which variables are significant using ANOVA f-test Feature Selection
     bestfeatures = SelectKBest(score_func = f_classif, k = 'all')
+    st.dataframe(x_train)
     bestfeatures.fit(x_train, y_train)
     x_train_fs = bestfeatures.transform(x_train)
     x_test_fs = bestfeatures.transform(x_test)
