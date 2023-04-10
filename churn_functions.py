@@ -47,7 +47,12 @@ def vif_df(data):
     vif_df['VIF'] = [variance_inflation_factor(x.values, i) for i in range(x.shape[1])]
     return vif_df
 
-def clean_data(data, prev):
+def clean_data(data, prev, vif_thres, propo_thres, dispro_thres, all_customer_ID):
+
+    #st.write(all_customer_ID)
+    
+    data["customerID"] = all_customer_ID
+    
 
     # FIX
     check = []
@@ -62,12 +67,8 @@ def clean_data(data, prev):
     to_remove = []
     num_rows = len(data)
     for col in data.columns:
-        if data[col].isna().sum() > num_rows / 2:
+        if data[col].isna().sum() > num_rows * vif_thres:
             to_remove.append(col)
-    try:
-        st.write(f"Column/s that exceed the given proportion of nulls (0.9) is/are {' '.split(to_remove)}")
-    except:
-        st.write("No column has excessive null entries by given threshold")
     data = data.drop(to_remove)
     
 
@@ -111,8 +112,6 @@ def clean_data(data, prev):
 
 
 
-
-
     mean_of_cols = {column: np.mean(data[column]) for column in data.columns}
     sd_of_cols = {column: np.std(data[column]) for column in data.columns}
     num_cols = len(data.columns)
@@ -133,13 +132,12 @@ def clean_data(data, prev):
             for cols in outliers:
                 data.iloc[index][cols] = mean_of_cols[cols]
     
+    #ids = data["customerID"]
+    #st.dataframe(ids)
+
+
     for id in to_remove:
         data = data[data.CustomerID != id]
-    # Remove the first column in the dataset which corresponds with the customerID
-    data.pop(data.columns[0])
-
-
-
 
     if prev == True:
         scaler = MinMaxScaler()
@@ -157,14 +155,10 @@ def clean_data(data, prev):
     for column in data:
         val_dis = list(data[column].value_counts())
         if len(val_dis) == 2:
-            if min(val_dis) < 0.9 * max(val_dis):
+            if min(val_dis) <  dispro_thres * max(val_dis):
                 to_purge.append(column)
-    try:
-        st.write(f"Column/s that exceed the given proportion of nulls (0.9) is/are {' '.split(to_purge)}")
-    except:
-        st.write("No column has excessive null entries by given threshold")
+    
     data.drop(to_purge, axis=1)
-
 
 
     if prev == True:
@@ -173,14 +167,13 @@ def clean_data(data, prev):
         vif_df = pd.DataFrame()
         vif_df['Variable'] = x.columns
         vif_df['VIF'] = [variance_inflation_factor(x.values, i) for i in range(x.shape[1])]
-        high_vif = vif_df.loc[vif_df['VIF'] >= 10]
+        high_vif = vif_df.loc[vif_df['VIF'] >= vif_thres]
         to_drop = [i for i in (high_vif['Variable']) if i != 'Intercept']
-        try:
-            st.write(f"Variable/s which exceed the given threshold VIF of 10 is/are {' '.split(to_drop)}")
-        except:
-            st.write("No variables exceed the given threshold VIF of 10")
+        
         data.drop(to_drop, axis=1)
-
+        return [vif_df, data, to_remove, to_purge,to_drop, all_customer_ID]
+    
+    st.markdown("<br>",unsafe_allow_html=True)
     return data
 
 
@@ -189,7 +182,6 @@ def clean_data(data, prev):
 def feat_sel1(data, x, x_train, x_test, y_train, y_test):
     # Checking which variables are significant using ANOVA f-test Feature Selection
     bestfeatures = SelectKBest(score_func = f_classif, k = 'all')
-    st.dataframe(x_train)
     bestfeatures.fit(x_train, y_train)
     x_train_fs = bestfeatures.transform(x_train)
     x_test_fs = bestfeatures.transform(x_test)
@@ -197,7 +189,6 @@ def feat_sel1(data, x, x_train, x_test, y_train, y_test):
     for i in range(len(bestfeatures.scores_)):
         if (bestfeatures.pvalues_[i] <= 0.05):
             model_by_Anova.update({x.columns[i]: i}) 
-        print(f"Feature: {i, bestfeatures.pvalues_[i]}")
     return [bestfeatures.scores_, model_by_Anova]
     #pyplot.bar([i for i in range(len(bestfeatures.scores_))], bestfeatures.scores_)
 
