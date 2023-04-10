@@ -125,7 +125,8 @@ if data is not None and "Churn" in data.columns and "customerID" in data.columns
     if len(data.columns) <= 2:
         st.warning("Data contains insufficient columns")
     else:
-        all_customer_ID = [i for i in data["customerID"]]
+        original_data = data
+        all_customer_ID = data["customerID"]
         st.markdown("Your input")
         st.dataframe(data)
 
@@ -139,7 +140,7 @@ if data is not None and "Churn" in data.columns and "customerID" in data.columns
             st.write(variable_data_type)
 
             if len(variable_data_type) == len(variables):
-                st.markdown("Specify the regex format for each variable (*Optional*)")
+                st.markdown("Specify the regex format or a list of options seperated by commas for each variable (*Optional*)")
                 variables.append("Churn")
                 submitted = var_format(data)
                 st.write(variable_format)
@@ -178,6 +179,7 @@ if data is not None and "Churn" in data.columns and "customerID" in data.columns
                     x_scplt = st.radio("X axis", variables)
                 with col2:
                     y_scplt = st.radio("Y axis", variables)
+
                 fig = plt.figure()
                 plt.scatter(data[x_scplt], data[y_scplt])
                 plt.xlabel(x_scplt)
@@ -185,7 +187,39 @@ if data is not None and "Churn" in data.columns and "customerID" in data.columns
                 plt.title(f"{y_scplt} vs {x_scplt}")
                 st.pyplot(fig)
                 
-                data = c.clean_data(data, True)
+
+
+             
+                st.markdown("<br>",unsafe_allow_html=True)
+                st.markdown("### Cleaning the data")
+                st.markdown("<br>",unsafe_allow_html=True)
+                vif_thres_test = st.slider("Select the VIF threshold", 0, 100, 10)
+                propo_thres_test = st.slider("Select the proportion of nulls threshold", 0.0, 1.0, 0.5)
+                dispro_thres_test = st.slider("Select the maximum disproportion of variables within a column", 0.0, 1.0, 0.9)
+                st.markdown("<br>",unsafe_allow_html=True)
+
+
+                data_vif = c.clean_data(data, True, vif_thres_test, propo_thres_test, dispro_thres_test, all_customer_ID)
+                data = data_vif[1]
+                to_remove, to_purge,to_drop, curr_customer_ID = data_vif[2], data_vif[3], data_vif[4], data_vif[5]
+
+                try:
+                    st.write(f"Column/s that exceed the given proportion of nulls {propo_thres_test} is/are {' '.split(to_remove)}")
+                except:
+                    st.write("No column has excessive null entries by given threshold")
+
+                try:
+                    st.write(f"Column/s that have a strongly disproportionate distribution of variable at {dispro_thres_test} is/are {' '.split(to_purge)}")
+                except:
+                    st.write(f"No column has have a strongly disproportionate distribution of variable at {dispro_thres_test}")
+        
+                try:
+                    st.write(f"Variable/s which exceed the given threshold VIF of {vif_thres_test} is/are {' '.split(to_drop)}")
+                except:
+                    st.write(f"No variables exceed the given threshold VIF of {vif_thres_test}")
+                st.markdown("<br>",unsafe_allow_html=True)
+
+
                 st.markdown("### Correlations between variables ###")
                 st.markdown("<br>",unsafe_allow_html=True)
                 col1, col2 = st.columns(2, gap = "large")
@@ -197,8 +231,8 @@ if data is not None and "Churn" in data.columns and "customerID" in data.columns
                     st.write(fig)
                 with col2:
                     st.markdown("VIF of each variable")
-                    vif_df = c.vif_df(data)
-                    st.dataframe(vif_df)
+                    #vif_df = c.vif_df(data)
+                    st.dataframe(data_vif[0])
                 st.markdown("<br>",unsafe_allow_html=True)
 
                 st.markdown("# Splitting the Data #")
@@ -244,10 +278,19 @@ if data is not None and "Churn" in data.columns and "customerID" in data.columns
                 st.markdown("<br>",unsafe_allow_html=True)
                 #plt.title("ANOVA f-test Feature Selection")
                 #st.pyplot(fig)
+                #lol["Names"] = [i for i in model_by_Anova]
+                feature_plot = pd.DataFrame(index = [i for i in data.columns[:-1]])    
+                feature_plot["Variables"] = bestfeatures
+                st.markdown("ANOVA f-test Feature Selection")   
+                st.markdown("<br>",unsafe_allow_html=True)
+                st.bar_chart(feature_plot)
+                predictors = data.columns[:-1]
+                selected_pred = [i for i in model_by_Anova]
 
-                st.markdown("ANOVA f-test Feature Selection")    
-                st.bar_chart(pd.DataFrame(bestfeatures)) 
-
+                if len(selected_pred) == len(predictors):
+                    st.markdown(f"The variables that yields a p value of less than 0.05 are {', '.join(selected_pred)}")
+                else:
+                    st.markdown(f"The variables that yields a p value of less than 0.05 are {', '.join(selected_pred)} excluding {' '.join(predictors.difference(selected_pred))}")
 
 
                 
@@ -487,9 +530,8 @@ if data is not None and "Churn" in data.columns and "customerID" in data.columns
                 st.markdown(f"# Dashboard")
                 classifier = all_classifiers[best_model_i]
                 predict_prob = classifier.predict_proba(data[model_by_Anova])
-                most_riskoc = list([i[1] for i in predict_prob])
-                st.markdown("<br>",unsafe_allow_html=True)
-                st.markdown(f"## The customer at most risk of churning is the customer with ID {all_customer_ID[most_riskoc.index(max(most_riskoc))]}")
+
+                                        
                 #st.dataframe(data.iloc[most_riskoc.index(max(most_riskoc))])
                 st.markdown("<br>",unsafe_allow_html=True)  
                 cola, colb = st.columns(2, gap = "large")
@@ -515,6 +557,27 @@ if data is not None and "Churn" in data.columns and "customerID" in data.columns
                     st.markdown(f"Probability of churn")
                     st.bar_chart(predict_prob)
 
+
+                st.markdown("<br>",unsafe_allow_html=True)
+                st.markdown("### Customers with highest risk of Churn")
+                st.markdown("<br>",unsafe_allow_html=True)
+                most_riskoc = sorted([(i[1], index) for index, i in enumerate(predict_prob)], key = lambda x: x[0], reverse=True)
+                index_arrangement = [i[1] for i in most_riskoc]
+                #descending_churn = original_data.iloc[index_arrangement]
+                descending_churn = pd.DataFrame()
+                descending_churn["CustomerID"] = [all_customer_ID[i] for i in index_arrangement]
+                descending_churn["Churn"] = data.iloc[index_arrangement]["Churn"]
+                descending_churn["Churn Rate"] = [i[0] for i in most_riskoc]
+                st.dataframe(descending_churn)
+                st.markdown("<br>",unsafe_allow_html=True)
+                st.download_button(
+                    label="Download top risk customers as .csv",
+                    data=descending_churn.to_csv(index=False).encode('utf-8'),
+                    file_name='top_risk_customers.csv',
+                    mime='text/csv',
+                )
+
+
                 st.markdown(f"# Making predictions")
                 st.markdown("<br>",unsafe_allow_html=True)
                 new_data = st.file_uploader(label="Upload new dataset")
@@ -527,9 +590,15 @@ if data is not None and "Churn" in data.columns and "customerID" in data.columns
                         quit()
                     st.markdown(f"Input")   
                     st.dataframe(new_data)
-                    new_data = c.clean_data(new_data, False)
+                    new_cust_ID = new_data["customerID"]
+                    new_data = c.clean_data(new_data, False, vif_thres_test, propo_thres_test, dispro_thres_test, new_cust_ID)
                     churn_col = classifier.predict(new_data[model_by_Anova])
+                    new_predict_prob = classifier.predict_proba(new_data[model_by_Anova])
                     new_data["Churn"] = churn_col
+                    new_most_riskoc = sorted([(i[1], index) for index, i in enumerate(new_predict_prob)], key = lambda x: x[0], reverse=True)
+                    new_data["Churn Rate"] = [i[0] for i in new_most_riskoc]
+		
+                    #new_data["Churn Rate"] = new_predict_prob
                     st.markdown(f"Output")   
                     st.dataframe(new_data)
                     st.markdown("<br>",unsafe_allow_html=True)  
@@ -540,7 +609,11 @@ if data is not None and "Churn" in data.columns and "customerID" in data.columns
                     #st.pyplot(fig)   
                     st.markdown(f"Churn")  
                     st.markdown("<br>",unsafe_allow_html=True)   
-                    st.bar_chart(pd.DataFrame(new_data["Churn"].value_counts())) 
+
+                    #st.dataframe(new_data["Churn"])
+                    st.bar_chart(new_data["Churn"].value_counts())
+
+                    #st.bar_chart(pd.DataFrame(new_data["Churn"])) 
                     st.markdown("<br>",unsafe_allow_html=True)                
                     st.download_button(
                         label="Download new data as .csv",
