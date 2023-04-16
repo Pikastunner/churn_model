@@ -202,6 +202,7 @@ if data is not None and "Churn" in data.columns and "customerID" in data.columns
                 data_vif = c.clean_data(data, True, vif_thres_test, propo_thres_test, dispro_thres_test, all_customer_ID)
                 data = data_vif[1]
                 to_remove, to_purge,to_drop, curr_customer_ID = data_vif[2], data_vif[3], data_vif[4], data_vif[5]
+                not_scaled = data_vif[6]
 
                 try:
                     st.write(f"Column/s that exceed the given proportion of nulls {propo_thres_test} is/are {' '.split(to_remove)}")
@@ -288,9 +289,9 @@ if data is not None and "Churn" in data.columns and "customerID" in data.columns
                 selected_pred = [i for i in model_by_Anova]
 
                 if len(selected_pred) == len(predictors):
-                    st.markdown(f"The variables that yields a p value of less than 0.05 are {', '.join(selected_pred)}")
+                    st.markdown(f"Using the F-statistic, the variables that yields a p value of less than 0.05 are {', '.join(selected_pred)}")
                 else:
-                    st.markdown(f"The variables that yields a p value of less than 0.05 are {', '.join(selected_pred)} excluding {' '.join(predictors.difference(selected_pred))}")
+                    st.markdown(f"Using the F-statistic, the variables that yields a p value of less than 0.05 are {', '.join(selected_pred)} excluding {' '.join(predictors.difference(selected_pred))}")
 
 
                 
@@ -526,11 +527,21 @@ if data is not None and "Churn" in data.columns and "customerID" in data.columns
                 st.markdown(f"## {model_names[best_model_i]} is the model with the best model metrics")  
                 st.markdown("<br>",unsafe_allow_html=True)
 
+                # YOU CAN SELECT THE ML MODEL YOU WANT TO USE RECOMMENDED IS THE EBST model
+                st.markdown(f"### Optional: Specify a machine learning model to use")  
+                st.markdown("<br>",unsafe_allow_html=True)
+                best_m = model_names[best_model_i]
+                model_names.remove(best_m)
+                model_names.insert(0, best_m)
+                selected_model = st.radio(f"By default we have selected {best_m} (the best model by our parameters)", model_names)
+                st.markdown("<br>",unsafe_allow_html=True)
+
+                ## TO FIX
+                ## MAKE SURE THAT YOU CAN CHANGE THE MODEL SELECTED
 
                 st.markdown(f"# Dashboard")
                 classifier = all_classifiers[best_model_i]
                 predict_prob = classifier.predict_proba(data[model_by_Anova])
-
                                         
                 #st.dataframe(data.iloc[most_riskoc.index(max(most_riskoc))])
                 st.markdown("<br>",unsafe_allow_html=True)  
@@ -552,23 +563,43 @@ if data is not None and "Churn" in data.columns and "customerID" in data.columns
                     plt.title(f"{y_axis} vs {x_axis}")
                     st.pyplot(plot1)
                 with colb:
-                    st.markdown(f"### Probability of churn amongst all customers")
+                    #st.markdown(f"### Probability of churn amongst all customers")
+                    #st.markdown("<br>",unsafe_allow_html=True)
+                    #st.markdown(f"Probability of churn")
+                    #fig = plt.figure()
+                    #hist = pd.DataFrame(predict_prob)[1]
+                    #st.bar_chart(pd.DataFrame(hist.value_counts())) 
+                    #st.bar_chart(predict_prob)
+                    st.markdown(f"### Average Churn Rate of unique values in a variable")
                     st.markdown("<br>",unsafe_allow_html=True)
-                    st.markdown(f"Probability of churn")
-                    st.bar_chart(predict_prob)
+                    #st.markdown(f"Select a variable to view")
+                    x_axis = st.radio("Select a variable to view:", model_by_Anova)
+                    numerical = False
+                    if variable_data_type[x_axis] == "Numerical":
+                        subset =  st.slider("Select how much to subset the numerical values", 0, 20, 4)
+                        numerical = subset
+                    st.markdown("<br>",unsafe_allow_html=True)
+                    descending_churn = c.top_churn(predict_prob, all_customer_ID, not_scaled)
+                    churn_by_var = c.avg_churn(descending_churn, x_axis, numerical)
+                    st.bar_chart(churn_by_var)
 
 
                 st.markdown("<br>",unsafe_allow_html=True)
                 st.markdown("### Customers with highest risk of Churn")
                 st.markdown("<br>",unsafe_allow_html=True)
-                most_riskoc = sorted([(i[1], index) for index, i in enumerate(predict_prob)], key = lambda x: x[0], reverse=True)
-                index_arrangement = [i[1] for i in most_riskoc]
+
+                percent_view = st.slider("Choose to view the top specified percentage of customers", 0, 100, 100)
+                st.markdown("<br>",unsafe_allow_html=True)
+
+                #most_riskoc = sorted([(i[1], index) for index, i in enumerate(predict_prob)], key = lambda x: x[0], reverse=True)
+                #index_arrangement = [i[1] for i in most_riskoc]
                 #descending_churn = original_data.iloc[index_arrangement]
-                descending_churn = pd.DataFrame()
-                descending_churn["CustomerID"] = [all_customer_ID[i] for i in index_arrangement]
-                descending_churn["Churn"] = data.iloc[index_arrangement]["Churn"]
-                descending_churn["Churn Rate"] = [i[0] for i in most_riskoc]
-                st.dataframe(descending_churn)
+                #descending_churn = pd.DataFrame()
+                #descending_churn["customerID"] = [all_customer_ID[i] for i in index_arrangement]
+                #descending_churn["Churn Rate"] = [i[0] for i in most_riskoc]
+                #descending_churn = pd.merge(descending_churn, original_data, on='customerID', how='inner')
+                number_rows = len(descending_churn)
+                st.dataframe(descending_churn.head(int(percent_view / 100 * (number_rows - 1))))
                 st.markdown("<br>",unsafe_allow_html=True)
                 st.download_button(
                     label="Download top risk customers as .csv",
@@ -576,6 +607,31 @@ if data is not None and "Churn" in data.columns and "customerID" in data.columns
                     file_name='top_risk_customers.csv',
                     mime='text/csv',
                 )
+
+                st.markdown("<br>",unsafe_allow_html=True)
+                st.markdown("### Customers by risk category")
+                st.markdown("<br>",unsafe_allow_html=True)
+                low = st.number_input('Choose the churn rate for low risk customers', min_value = 0.0, max_value = 1.0, value=0.4)
+                high = st.number_input('Choose the churn rate for high risk customers', min_value = low, max_value = 1.0, value=0.5)
+                low_risk = descending_churn[descending_churn['Churn Rate'] < low]
+                medium_risk = descending_churn[(descending_churn['Churn Rate'] > low) & (descending_churn['Churn Rate'] < high)]
+                high_risk = descending_churn[descending_churn['Churn Rate'] > high]
+
+                st.markdown("<br>",unsafe_allow_html=True)
+                st.markdown("#### The low risk customers")
+                st.markdown(f"Customers that have a churn rate that is less than {low}")
+                st.dataframe(low_risk)
+                st.markdown("<br>",unsafe_allow_html=True)
+                st.markdown("#### The medium risk customers")
+                st.markdown(f"Customers that have a churn rate that is greater than {low} but less than {high}")
+                st.dataframe(medium_risk)
+                st.markdown("<br>",unsafe_allow_html=True)
+                st.markdown("#### The high risk customers")
+                st.markdown(f"Customers that have a churn rate that is greater than {high}")
+                st.markdown("<br>",unsafe_allow_html=True)
+                st.dataframe(high_risk)
+
+
 
 
                 st.markdown(f"# Making predictions")
@@ -585,6 +641,7 @@ if data is not None and "Churn" in data.columns and "customerID" in data.columns
                 if new_data is not None:
                     try:
                         new_data = pd.DataFrame(pd.read_csv(new_data, encoding="unicode_escape"))
+                        copy_new = new_data
                     except:
                         st.error("Can only receive inputs of .csv type")
                         quit()
@@ -597,10 +654,21 @@ if data is not None and "Churn" in data.columns and "customerID" in data.columns
                     new_data["Churn"] = churn_col
                     new_most_riskoc = sorted([(i[1], index) for index, i in enumerate(new_predict_prob)], key = lambda x: x[0], reverse=True)
                     new_data["Churn Rate"] = [i[0] for i in new_most_riskoc]
-		
+                    index_arrangement = [i[1] for i in new_most_riskoc]
+                    #descending_churn = original_data.iloc[index_arrangement]
+                    descending_churn = pd.DataFrame()
+                    descending_churn["customerID"] = [all_customer_ID[i] for i in index_arrangement]
+                    new_data["customerID"] = descending_churn["customerID"]
+                   # st.write(new_data.columns)
+                    #st.write(f"{cols} is columns")
+                    new_data = new_data[["customerID", "Churn", "Churn Rate"]]
+                    copy_new = pd.merge(copy_new, new_data, on='customerID', how='inner')
+
+
+                    
                     #new_data["Churn Rate"] = new_predict_prob
                     st.markdown(f"Output")   
-                    st.dataframe(new_data)
+                    st.dataframe(copy_new)
                     st.markdown("<br>",unsafe_allow_html=True)  
                     st.markdown("<br>",unsafe_allow_html=True)
                     #fig = plt.figure()
