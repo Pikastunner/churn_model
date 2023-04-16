@@ -47,9 +47,10 @@ def vif_df(data):
     vif_df['VIF'] = [variance_inflation_factor(x.values, i) for i in range(x.shape[1])]
     return vif_df
 
+
+
 def clean_data(data, prev, vif_thres, propo_thres, dispro_thres, all_customer_ID):
 
-    #st.write(all_customer_ID)
     
     data["customerID"] = all_customer_ID
     
@@ -72,6 +73,7 @@ def clean_data(data, prev, vif_thres, propo_thres, dispro_thres, all_customer_ID
     data = data.drop(to_remove)
     
 
+
     # Replace nulls that only appear once in a row with the mean of that column
     to_replace = {}
     for index, row in data.iterrows():
@@ -79,10 +81,24 @@ def clean_data(data, prev, vif_thres, propo_thres, dispro_thres, all_customer_ID
         if (null_rows == 1):
             curr_row = [str(i) for i in list(row)]
             to_replace.update({index:  curr_row.index('nan')})
-    #st.write(to_replace)
     for i, j  in to_replace.items():
+        #st.write(data.iloc[[i], j])
+        #st.write(data.loc[:, list(data.columns)[j]].mean())
         data.iloc[[i], j] = data.loc[:, list(data.columns)[j]].mean()
     data = data.dropna()
+
+
+    to_purge = []
+    for column in data:
+        val_dis = list(data[column].value_counts())
+        if len(val_dis) == 2:
+            if min(val_dis) <  dispro_thres * max(val_dis):
+                to_purge.append(column)
+    
+    data.drop(to_purge, axis=1)
+
+    not_scaled = data.copy()
+
 
 
     to_hot_encode = []
@@ -111,7 +127,6 @@ def clean_data(data, prev, vif_thres, propo_thres, dispro_thres, all_customer_ID
 
 
 
-
     mean_of_cols = {column: np.mean(data[column]) for column in data.columns}
     sd_of_cols = {column: np.std(data[column]) for column in data.columns}
     num_cols = len(data.columns)
@@ -135,9 +150,10 @@ def clean_data(data, prev, vif_thres, propo_thres, dispro_thres, all_customer_ID
     #ids = data["customerID"]
     #st.dataframe(ids)
 
-
     for id in to_remove:
         data = data[data.CustomerID != id]
+
+
 
     if prev == True:
         scaler = MinMaxScaler()
@@ -150,15 +166,8 @@ def clean_data(data, prev, vif_thres, propo_thres, dispro_thres, all_customer_ID
         scaler = MinMaxScaler()
         sliced = scaler.fit_transform(data)
         data = pd.DataFrame(sliced, columns=data.columns, index=data.index)
-
-    to_purge = []
-    for column in data:
-        val_dis = list(data[column].value_counts())
-        if len(val_dis) == 2:
-            if min(val_dis) <  dispro_thres * max(val_dis):
-                to_purge.append(column)
+        data = data.drop("customerID", axis=1)
     
-    data.drop(to_purge, axis=1)
 
 
     if prev == True:
@@ -171,11 +180,10 @@ def clean_data(data, prev, vif_thres, propo_thres, dispro_thres, all_customer_ID
         to_drop = [i for i in (high_vif['Variable']) if i != 'Intercept']
         
         data.drop(to_drop, axis=1)
-        return [vif_df, data, to_remove, to_purge,to_drop, all_customer_ID]
+        return [vif_df, data, to_remove, to_purge,to_drop, all_customer_ID, not_scaled]
     
     st.markdown("<br>",unsafe_allow_html=True)
     return data
-
 
 
 # THERE MAY BE A PROBLEM WITH THIS FUNCTION SINCE CHURN MAY BE REMOVED ALREADY
@@ -218,3 +226,59 @@ def get_metrics(y_test, y_pred):
     df["Metrics"] = metrics.keys()
     df["Scores"] = metrics.values()
     return df
+
+
+def top_churn(predict_prob, all_customer_ID, original_data):
+    most_riskoc = sorted([(i[1], index) for index, i in enumerate(predict_prob)], key = lambda x: x[0], reverse=True)
+    index_arrangement = [i[1] for i in most_riskoc]
+    #descending_churn = original_data.iloc[index_arrangement]
+    descending_churn = pd.DataFrame()
+    descending_churn["customerID"] = [all_customer_ID[i] for i in index_arrangement]
+    descending_churn["Churn Rate"] = [i[0] for i in most_riskoc]
+    descending_churn = pd.merge(descending_churn, original_data, on='customerID', how='inner')
+    return descending_churn
+
+def avg_churn(descending_churn, variable, numerical):
+    if not numerical:
+        num_terms = {i: 0 for i in descending_churn[variable].unique().tolist()}
+        sum_terms = {i: 0 for i in descending_churn[variable].unique().tolist()}
+        for index, row in descending_churn.iterrows():
+            num_terms[row[variable]] += 1
+            sum_terms[row[variable]] += row["Churn Rate"]
+        mean_churn = {i: sum_terms[i] / num_terms[i] for i in num_terms}
+        dataframe = pd.DataFrame.from_dict(mean_churn, orient='index',columns=[f"Unique vals in {variable}"])
+    else:
+        num_terms = {i: 0 for i in range(1, numerical + 1)}     
+        sum_terms = {i: 0 for i in range(1, numerical + 1)}
+        unique_terms = [float(i) for i in descending_churn[variable].unique().tolist()]
+        minimum = min(unique_terms)
+        maximum = max(unique_terms)
+        split = (maximum - minimum) / (numerical - 1)
+        subset_range = []
+        for i in range(0, numerical):
+            if len(subset_range) == 0:
+                subset_range.append((0, split))
+            else:
+                subset_range.append((subset_range[-1][1], subset_range[-1][1] + split))
+        subset_dict = {i: str(subset_range[i - 1]) for i in range(1, numerical + 1)}
+        for index, row in descending_churn.iterrows():
+            check = row[variable]
+            count = 1
+            #if not check.isnumeric():
+             #   continue
+            for ranges in subset_range:
+                if ranges[0] <= float(check) and ranges[1] > float(check):
+                    break
+                count += 1
+            num_terms[count] += 1
+            sum_terms[count] += row["Churn Rate"]
+        mean_churn = {}
+        for i in num_terms:
+            try:
+                avg = sum_terms[i] / num_terms[i]
+            except:
+                avg = 0
+            subs_range = str((int(subset_range[i - 1][0]), int(subset_range[i - 1][1])))
+            mean_churn.update({subs_range: avg})
+        dataframe = pd.DataFrame.from_dict(mean_churn, orient='index',columns=[f"Ranges in {variable}"])
+    return dataframe
