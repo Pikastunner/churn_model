@@ -103,9 +103,14 @@ def var_data_types(data):
         submitted = st.form_submit_button("Submit")
     return submitted
 
-def var_format(data):
+# FIX LATER
+
+def var_format(data, variable_data_type):
     with st.form("data_format"):
         for column in variables:
+            #options = st.multiselect(column, data[column].unique(), data[column].unique())
+           # if variable_data_type[column] == "Numerical":
+                
             selectbox = st.text_input(column)
             if len(selectbox) > 0:
                 variable_format.update({column: selectbox})
@@ -140,9 +145,50 @@ if data is not None and "Churn" in data.columns and "customerID" in data.columns
             st.write(variable_data_type)
 
             if len(variable_data_type) == len(variables):
-                st.markdown("Specify the regex format or a list of options seperated by commas for each variable (*Optional*)")
+                
+
+                # READ THIS !!!!!
+                #     df["Scale"] = df["Score"].replace(scale_mapper)
+
+                # Ordinal variables 
+                st.markdown("For all ordinal variables, select the hierachical order of values")
+                ordinal_vars = [(key, data[key].unique()) for key, value in variable_data_type.items() if value == "Ordinal"]
+                ordinal_rank = {}
+                with st.form("ordinal"):
+                    for vars in ordinal_vars:
+                        st.markdown(vars[0])
+                        ranks = {}
+                        for values in vars[1]:
+                            number = st.selectbox(f"{values}", [i for i in range(len(vars[1]))])
+                            ranks.update({values: int(number)})
+                        ordinal_rank.update({vars[0]: ranks})
+                    submitted = st.form_submit_button("Submit")
+                default_order = []
+                for var, vals in ordinal_rank.items():
+                    check_order = []
+                    for rank in vals:
+                        check_order.append(vals[rank])
+                    st.write(check_order)
+                    if len(set(check_order)) != len(check_order):
+                        default_order.append(var)
+
+                st.write(default_order)
+                if len(default_order) > 0:
+                    st.warning("You have duplicate orders. Ordinal scale is reset to the default encoding")
+                    for default_ord in default_order:
+                        orders = ordinal_rank[default_ord]
+                        i = 0
+                        for pos in orders:
+                            orders[pos] = i
+                            i += 1
+                        
+
+
+                st.write(ordinal_rank)
+                
+                st.markdown("Specify the regex format or a list of possible values seperated by commas for each variable (*Optional*)")
                 variables.append("Churn")
-                submitted = var_format(data)
+                submitted = var_format(data, variable_data_type)
                 st.write(variable_format)
                 #if len(variable_format) == len(variables):
                 data = data[variables]
@@ -199,7 +245,7 @@ if data is not None and "Churn" in data.columns and "customerID" in data.columns
                 st.markdown("<br>",unsafe_allow_html=True)
 
 
-                data_vif = c.clean_data(data, True, vif_thres_test, propo_thres_test, dispro_thres_test, all_customer_ID)
+                data_vif = c.clean_data(data, True, vif_thres_test, propo_thres_test, dispro_thres_test, all_customer_ID, variable_data_type)
                 data = data_vif[1]
                 to_remove, to_purge,to_drop, curr_customer_ID = data_vif[2], data_vif[3], data_vif[4], data_vif[5]
                 not_scaled = data_vif[6]
@@ -575,7 +621,9 @@ if data is not None and "Churn" in data.columns and "customerID" in data.columns
                     #st.markdown(f"Select a variable to view")
                     x_axis = st.radio("Select a variable to view:", model_by_Anova)
                     numerical = False
-                    if variable_data_type[x_axis] == "Numerical":
+                    if x_axis not in variable_data_type:
+                        pass
+                    elif variable_data_type[x_axis] == "Numerical":
                         subset =  st.slider("Select how much to subset the numerical values", 0, 20, 4)
                         numerical = subset
                     st.markdown("<br>",unsafe_allow_html=True)
@@ -648,7 +696,8 @@ if data is not None and "Churn" in data.columns and "customerID" in data.columns
                     st.markdown(f"Input")   
                     st.dataframe(new_data)
                     new_cust_ID = new_data["customerID"]
-                    new_data = c.clean_data(new_data, False, vif_thres_test, propo_thres_test, dispro_thres_test, new_cust_ID)
+                    new_data = new_data[[i for i in variables if i != "Churn"]]
+                    new_data = c.clean_data(new_data, False, vif_thres_test, propo_thres_test, dispro_thres_test, new_cust_ID, variable_data_type)
                     churn_col = classifier.predict(new_data[model_by_Anova])
                     new_predict_prob = classifier.predict_proba(new_data[model_by_Anova])
                     new_data["Churn"] = churn_col
