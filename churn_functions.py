@@ -49,26 +49,27 @@ def vif_df(data):
 
 
 
-def clean_data(data, prev, vif_thres, propo_thres, dispro_thres, all_customer_ID):
+def clean_data(data, prev, vif_thres, propo_thres, dispro_thres, all_customer_ID, variable_data_type):
 
     
     data["customerID"] = all_customer_ID
     
 
-    # FIX
-    check = []
-    check.append(len(data))
-    string_formats = []
+   # Ensure each column has the correct type
     for column in data:
         data[column].replace('(^[\s]+$|^$)', np.nan, inplace=True, regex=True)
-    data = data.astype({'TotalCharges':'float64'})
+    for variable, var_type in variable_data_type.items():
+        if var_type == "Numerical":
+            if data[variable].dtype == "Object":
+                data[variable].replace('^[0-9]+.?[0-9]+$', np.nan, inplace=True, regex=True)
+            data = data.astype({variable: 'float64'})
 
 
     # Check for heavily null columns and remove
     to_remove = []
     num_rows = len(data)
     for col in data.columns:
-        if data[col].isna().sum() > num_rows * vif_thres:
+        if data[col].isna().sum() > num_rows * propo_thres:
             to_remove.append(col)
     data = data.drop(to_remove)
     
@@ -88,33 +89,62 @@ def clean_data(data, prev, vif_thres, propo_thres, dispro_thres, all_customer_ID
     data = data.dropna()
 
 
+
+
+    # Get rid of disproportional counts of values in a variable
     to_purge = []
     for column in data:
+        if column == "Churn":
+            continue
         val_dis = list(data[column].value_counts())
         if len(val_dis) == 2:
-            if min(val_dis) <  dispro_thres * max(val_dis):
+            if min(val_dis) < (1 - dispro_thres) * max(val_dis):
+                st.write(max(val_dis), min(val_dis))
                 to_purge.append(column)
     
-    data.drop(to_purge, axis=1)
+    data = data.drop(to_purge, axis=1)
 
     not_scaled = data.copy()
 
+    st.write(not_scaled)
 
+    
+    # Temporarily remove the customerID column
 
-    to_hot_encode = []
-    for i in list(data.columns):
+    data = data.drop("customerID", axis=1)
+
+    #to_hot_encode = [i for i, j in variable_data_type.items() if j != "Numerical"]
+    to_ord_encode = [i for i, j in variable_data_type.items() if j == "Ordinal"]
+    if prev:
+        to_ord_encode.append("Churn")
+    to_hot_encode = [i for i, j in variable_data_type.items() if j == "Categorical"]
+    ord_enc = OrdinalEncoder() 
+    #for i in to_ord_encode:
+    #    data[i] = ord_enc.fit_transform(data[[i]])
+    
+    #data["Churn"] = ord_enc.fit_transform(data[["Churn"]])  
+
+    st.write(data.columns)
+    for i in to_ord_encode:
+        data[i] = ord_enc.fit_transform(data[[i]])
+    
+    #for i in to_hot_encode:
+     #   to_hot_encode.append(i)
+    
+
+    """for i in list(data.columns):
         unique_vals = data[i].value_counts()
         number_format = str(data[i].iloc[0]).replace(".", "")
         if not str(number_format).isnumeric():
-            ord_enc = OrdinalEncoder() 
             data[i] = ord_enc.fit_transform(data[[i]])
-            """
+            //
             if len(list(unique_vals)) == 2:
                 ord_enc = OrdinalEncoder() 
                 dataset[i] = ord_enc.fit_transform(dataset[[i]])
             else:
                 print(i, repr((dataset[i]).iloc[0]))
                 to_hot_encode.append(i)
+            //
             """
     if len(to_hot_encode) > 0:
         data = pd.get_dummies(data, columns = to_hot_encode)
@@ -123,8 +153,12 @@ def clean_data(data, prev, vif_thres, propo_thres, dispro_thres, all_customer_ID
     new_column_names = [re.sub("[()-\s]", "", new_cols) for new_cols in old_column_names]
     replace_names = {old_column_names[i]: new_column_names[i] for i in range(len(old_column_names))}
     data = data.rename(columns = replace_names)
+    
 
+    st.write(data.columns)
+    st.write("Here")
 
+   # st.dataframe(data["Partner"])
 
 
     mean_of_cols = {column: np.mean(data[column]) for column in data.columns}
@@ -150,24 +184,35 @@ def clean_data(data, prev, vif_thres, propo_thres, dispro_thres, all_customer_ID
     #ids = data["customerID"]
     #st.dataframe(ids)
 
+    data["customerID"] = all_customer_ID
+
     for id in to_remove:
         data = data[data.CustomerID != id]
 
 
+
+    data = data.drop("customerID", axis=1)
+
+    st.write(data.columns)
 
     if prev == True:
         scaler = MinMaxScaler()
         to_add = data['Churn']
         sliced = data.loc[:, data.columns != 'Churn']
         sliced = scaler.fit_transform(sliced)
-        data = pd.DataFrame(sliced, columns=data.columns[:-1], index=data.index)
+        st.write(data.shape, sliced.shape)
+        data = pd.DataFrame(sliced, columns=[i for i in data.columns if i != "Churn"], index=data.index)
         data["Churn"] = to_add 
     else:
         scaler = MinMaxScaler()
         sliced = scaler.fit_transform(data)
         data = pd.DataFrame(sliced, columns=data.columns, index=data.index)
-        data = data.drop("customerID", axis=1)
+        #data = data.drop("customerID", axis=1)
     
+    not_scaled = not_scaled.drop(to_hot_encode, axis=1)
+    new_encoded = [i for i in data.columns if i not in not_scaled.columns]
+    for i in new_encoded:
+        not_scaled[i] = data[i]
 
 
     if prev == True:
