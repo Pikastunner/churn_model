@@ -49,10 +49,10 @@ def vif_df(data):
 
 
 
-def clean_data(data, prev, vif_thres, propo_thres, dispro_thres, all_customer_ID, variable_data_type):
+def clean_data(data, prev, vif_thres, propo_thres, dispro_thres, all_customer_ID, variable_data_type, customerID, sd_threshold, ordinal_rank, churn):
 
     
-    data["customerID"] = all_customer_ID
+    data[customerID] = all_customer_ID
     
 
    # Ensure each column has the correct type
@@ -66,12 +66,12 @@ def clean_data(data, prev, vif_thres, propo_thres, dispro_thres, all_customer_ID
 
 
     # Check for heavily null columns and remove
-    to_remove = []
+    to_erase = []
     num_rows = len(data)
     for col in data.columns:
         if data[col].isna().sum() > num_rows * propo_thres:
-            to_remove.append(col)
-    data = data.drop(to_remove)
+            to_erase.append(col)
+    data = data.drop(to_erase)
     
 
 
@@ -82,10 +82,24 @@ def clean_data(data, prev, vif_thres, propo_thres, dispro_thres, all_customer_ID
         if (null_rows == 1):
             curr_row = [str(i) for i in list(row)]
             to_replace.update({index:  curr_row.index('nan')})
+    #st.write(to_replace)
+    column_modes = [data[i].mode()[0] for i in data.columns]
+    column_means = []
+    for i in data.columns:
+        if i == churn or i == customerID:
+            column_means.append(None)
+        elif variable_data_type[i] == "Numerical":
+            column_means.append(data[i].mean())
+        else:
+            column_means.append(None)
+    #st.write(column_modes)
+    #st.write(column_means)
+    column_list = [i for i in data.columns]
     for i, j  in to_replace.items():
-        #st.write(data.iloc[[i], j])
-        #st.write(data.loc[:, list(data.columns)[j]].mean())
-        data.iloc[[i], j] = data.loc[:, list(data.columns)[j]].mean()
+        if variable_data_type[column_list[j]] == "Numerical":
+            data.iloc[[i], j] = column_means[j]
+        else:
+            data.iloc[[i], j] = column_modes[j]
     data = data.dropna()
 
 
@@ -94,29 +108,27 @@ def clean_data(data, prev, vif_thres, propo_thres, dispro_thres, all_customer_ID
     # Get rid of disproportional counts of values in a variable
     to_purge = []
     for column in data:
-        if column == "Churn":
+        if column == churn:
             continue
         val_dis = list(data[column].value_counts())
         if len(val_dis) == 2:
             if min(val_dis) < (1 - dispro_thres) * max(val_dis):
-                st.write(max(val_dis), min(val_dis))
                 to_purge.append(column)
     
     data = data.drop(to_purge, axis=1)
 
     not_scaled = data.copy()
 
-    st.write(not_scaled)
 
     
     # Temporarily remove the customerID column
 
-    data = data.drop("customerID", axis=1)
+    data = data.drop(customerID, axis=1)
 
     #to_hot_encode = [i for i, j in variable_data_type.items() if j != "Numerical"]
     to_ord_encode = [i for i, j in variable_data_type.items() if j == "Ordinal"]
-    if prev:
-        to_ord_encode.append("Churn")
+    #if prev:
+     #   to_ord_encode.append("Churn")
     to_hot_encode = [i for i, j in variable_data_type.items() if j == "Categorical"]
     ord_enc = OrdinalEncoder() 
     #for i in to_ord_encode:
@@ -124,9 +136,13 @@ def clean_data(data, prev, vif_thres, propo_thres, dispro_thres, all_customer_ID
     
     #data["Churn"] = ord_enc.fit_transform(data[["Churn"]])  
 
-    st.write(data.columns)
+    #df["Scale"] = df["Score"].replace(scale_mapper)
     for i in to_ord_encode:
-        data[i] = ord_enc.fit_transform(data[[i]])
+        data[i] = data[i].replace(ordinal_rank[i])
+    if prev:
+        data[churn] = data[churn].replace(ordinal_rank[churn])
+
+        #data[i] = ord_enc.fit_transform(data[[i]])
     
     #for i in to_hot_encode:
      #   to_hot_encode.append(i)
@@ -155,54 +171,57 @@ def clean_data(data, prev, vif_thres, propo_thres, dispro_thres, all_customer_ID
     data = data.rename(columns = replace_names)
     
 
-    st.write(data.columns)
-    st.write("Here")
 
-   # st.dataframe(data["Partner"])
 
+    # If there are a few outliers in a row, substitute them with the mean of the column if numerical else mode
+    # Otherwise, remove the entire row.
 
     mean_of_cols = {column: np.mean(data[column]) for column in data.columns}
     sd_of_cols = {column: np.std(data[column]) for column in data.columns}
+    mode_of_cols = {column: data[column].mode()[0] for column in data.columns}
     num_cols = len(data.columns)
     to_remove = []
     for index, row in data.iterrows():
         outliers = []
         for column in data.columns:
             data_mean, data_std = mean_of_cols[column], sd_of_cols[column]
-            threshold = data_std * 3
+            threshold = data_std * sd_threshold
             lower_bound, upper_bound = data_mean - threshold, data_mean + threshold
             if (row[column] <= lower_bound or row[column] >= upper_bound):
                 outliers.append(column)
         if len(outliers) == 0:
             continue
         elif len(outliers) > num_cols / 2:
-            to_remove.append(data["customerID"])
+            to_remove.append(data[customerID])
         else:
             for cols in outliers:
-                data.iloc[index][cols] = mean_of_cols[cols]
+                if cols not in variable_data_type:
+                    data.iloc[index][cols] = mode_of_cols[cols]
+                elif variable_data_type[cols] == "Numerical":
+                    data.iloc[index][cols] = mean_of_cols[cols]
+                else:
+                    data.iloc[index][cols] = mode_of_cols[cols]
     
     #ids = data["customerID"]
     #st.dataframe(ids)
 
-    data["customerID"] = all_customer_ID
+    data[customerID] = all_customer_ID
 
     for id in to_remove:
         data = data[data.CustomerID != id]
 
+    not_encoded = data.copy()
 
+    data = data.drop(customerID, axis=1)
 
-    data = data.drop("customerID", axis=1)
-
-    st.write(data.columns)
 
     if prev == True:
         scaler = MinMaxScaler()
-        to_add = data['Churn']
-        sliced = data.loc[:, data.columns != 'Churn']
+        to_add = data[churn]
+        sliced = data.loc[:, data.columns != churn]
         sliced = scaler.fit_transform(sliced)
-        st.write(data.shape, sliced.shape)
-        data = pd.DataFrame(sliced, columns=[i for i in data.columns if i != "Churn"], index=data.index)
-        data["Churn"] = to_add 
+        data = pd.DataFrame(sliced, columns=[i for i in data.columns if i != churn], index=data.index)
+        data[churn] = to_add 
     else:
         scaler = MinMaxScaler()
         sliced = scaler.fit_transform(data)
@@ -217,18 +236,19 @@ def clean_data(data, prev, vif_thres, propo_thres, dispro_thres, all_customer_ID
 
     if prev == True:
         model_string = ' + '.join(data.columns)
-        y, x = dmatrices(f'Churn ~ {model_string}', data=data, return_type = 'dataframe')
+        y, x = dmatrices(f'{churn} ~ {model_string}', data=data, return_type = 'dataframe')
         vif_df = pd.DataFrame()
         vif_df['Variable'] = x.columns
         vif_df['VIF'] = [variance_inflation_factor(x.values, i) for i in range(x.shape[1])]
+        #st.write(vif_df["VIF"].tolist())
         high_vif = vif_df.loc[vif_df['VIF'] >= vif_thres]
         to_drop = [i for i in (high_vif['Variable']) if i != 'Intercept']
         
         data.drop(to_drop, axis=1)
-        return [vif_df, data, to_remove, to_purge,to_drop, all_customer_ID, not_scaled]
+        return [vif_df, data, to_erase, to_purge,to_drop, all_customer_ID, not_scaled, to_remove, not_encoded]
     
     st.markdown("<br>",unsafe_allow_html=True)
-    return data
+    return [data, all_customer_ID, not_scaled]
 
 
 # THERE MAY BE A PROBLEM WITH THIS FUNCTION SINCE CHURN MAY BE REMOVED ALREADY
@@ -273,14 +293,14 @@ def get_metrics(y_test, y_pred):
     return df
 
 
-def top_churn(predict_prob, all_customer_ID, original_data):
+def top_churn(predict_prob, all_customer_ID, original_data, customerID):
     most_riskoc = sorted([(i[1], index) for index, i in enumerate(predict_prob)], key = lambda x: x[0], reverse=True)
     index_arrangement = [i[1] for i in most_riskoc]
     #descending_churn = original_data.iloc[index_arrangement]
     descending_churn = pd.DataFrame()
-    descending_churn["customerID"] = [all_customer_ID[i] for i in index_arrangement]
+    descending_churn[customerID] = [all_customer_ID[i] for i in index_arrangement]
     descending_churn["Churn Rate"] = [i[0] for i in most_riskoc]
-    descending_churn = pd.merge(descending_churn, original_data, on='customerID', how='inner')
+    descending_churn = pd.merge(descending_churn, original_data, on=customerID, how='inner')
     return descending_churn
 
 def avg_churn(descending_churn, variable, numerical):
