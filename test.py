@@ -53,7 +53,7 @@ if data is not None:
     try:
         data = pd.DataFrame(pd.read_csv(data, encoding="unicode_escape"))
     except:
-        st.error("Can only receive inputs of .csv type")
+        st.error("Error: Can only receive inputs of .csv type",  icon="🛑")
         quit()
     with st.sidebar:
         st.markdown("# Churn Model")
@@ -144,7 +144,7 @@ model_metrics = []
 
 if data is not None:
     if len(data.columns) <= 2:
-        st.warning("Data contains insufficient columns")
+        st.error("Error: Data contains insufficient columns",  icon="🛑")
     else:
         tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["Input", "Preprocessing", "Building the model", "Model results", "Investigation of model", "Making predictions"])
         with tab1:
@@ -160,20 +160,20 @@ if data is not None:
                 quit()
             customerID = st.selectbox("Select the customer primary key of the data", selection)
             if customerID == "Select column":
-                st.error("Invalid ID")
+                st.error("Error: Invalid ID", icon="🛑")
                 quit()
             data = data.drop_duplicates(subset = [customerID], keep='first')
             original_data = data
             all_customer_ID = data[customerID]
             if not all_customer_ID.is_unique:
-                st.error("Not a primary key")
+                st.error("Error: Not a primary key", icon="🛑")
                 quit()
             st.markdown("<br>",unsafe_allow_html=True)
             st.markdown("Select the columns you want to use")
             submitted = select_columns(data, customerID, churn)
             data.drop(variables, axis=1)
             if len(variables) == 0:
-                st.error("Select at least one variable")
+                st.error("Error: Select at least one variable",icon="🛑")
                 quit()
             #st.write(variables)
             st.markdown("Specify the type of data each variable is")
@@ -182,7 +182,7 @@ if data is not None:
 
             # LAST CHANGE
             if len(variable_data_type) != len(variables):
-                st.error("Select at least one variable")
+                st.error("Error: Select at least one variable",  icon="🛑")
                 quit()
             
             # Check if there are any categorical / ordinal variables with too many unique values
@@ -197,7 +197,7 @@ if data is not None:
                         too_many_vars = True
                         too_many.append(i)
             if too_many_vars:
-                st.warning(f"These following categorical variables: [{','.join(too_many)}] will produce too many columns in the new dataset. As a result, the analysis will take significantly longer to output. Make sure to check whether the variable type is correct or if you want to include this variable at all.", icon="⚠️")
+                st.warning(f"Warning: These following categorical variables: [{','.join(too_many)}] will produce too many columns in the new dataset. As a result, the analysis will take significantly longer to output. Make sure to check whether the variable type is correct or if you want to include this variable at all.", icon="⚠️")
                 quit_opt = st.selectbox('Continue running?',('No', 'Yes'))
                 if quit_opt == "No":
                     quit()
@@ -235,7 +235,7 @@ if data is not None:
 
                 #st.write(default_order)
                 if len(default_order) > 0:
-                    st.warning("You have duplicate orders. Ordinal scale is reset to the default encoding")
+                    st.warning("Warning: You have duplicate orders. Ordinal scale is reset to the default encoding", icon="⚠️")
                     for default_ord in default_order:
                         orders = ordinal_rank[default_ord]
                         i = 0
@@ -312,7 +312,7 @@ if data is not None:
             with col1:
                 st.info("VIF (Variance Inflation Factor) is a measure of multicollinearity of independent variables that is the measure of correlations between variables.", icon="ℹ️")
             with col2:
-                st.info("A high VIF corresponds to a great correlation between variables and is unfavourable as it makes it difficult to distinguish their individual effects on the dependent variable", icon="ℹ️")
+                st.info("A high VIF corresponds to a significant correlation between variables and is unfavourable as it makes it difficult to distinguish their individual effects on the dependent variable", icon="ℹ️")
             with col3:
                 st.info("The default VIF threshold is set at 10.", icon="ℹ️")
             propo_thres_test = st.slider("Select a threshold for dropping columns that exceed a certain percentage of nulls", 0.0, 1.0, 0.5)
@@ -399,6 +399,13 @@ if data is not None:
             st.markdown("# Splitting the Data #")
             st.markdown("<br>",unsafe_allow_html=True)
             st.info("We split the dataset into a training set and a test set, to evaluate how well our machine learning model performs on each split", icon="ℹ️")
+            split_size = st.slider("Select a training size split", 0.0, 1.0, 0.75)
+            if split_size == 1:
+                st.error("Error: Training set cannot be the entire dataset.",icon="🛑")
+                quit()
+            elif split_size == 0:
+                st.error("Error: Training set cannot be none.",icon="🛑")
+                quit()
             num_cols = len(data.columns)
             x = data.iloc[:, :-1]
             y = data.iloc[:, num_cols - 1]
@@ -407,7 +414,7 @@ if data is not None:
             x_scaled = st_x.fit_transform(x)
             x = pd.DataFrame(x_scaled, index=x.index, columns=x.columns)
 
-            x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.25, random_state=1)
+            x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=1-split_size, random_state=1)
             topcol1, topcol2 = st.columns(2, gap = "large")
             with topcol1:
                 st.markdown("### Training set ###")
@@ -781,6 +788,7 @@ if data is not None:
             ## MAKE SURE THAT YOU CAN CHANGE THE MODEL SELECTED
         with tab5:
             st.markdown(f"# Investigation of model")
+            st.markdown("<br>",unsafe_allow_html=True)
             st.info(f"We use the selected model to make probability predictions of churn for each customer and using this, we can glean stronger insights between churn and the variables", icon="ℹ️") 
 
             classifier = all_classifiers[best_model_i]
@@ -846,7 +854,7 @@ if data is not None:
                     new_data = pd.DataFrame(pd.read_csv(new_data, encoding="unicode_escape"))
                     copy_new = new_data
                 except:
-                    st.error("Can only receive inputs of .csv type")
+                    st.error("Error: Can only receive inputs of .csv type",icon="🛑")
                     quit()
                 st.info(f"Your input", icon="ℹ️") 
                 st.dataframe(new_data)
@@ -919,8 +927,20 @@ if data is not None:
                 st.markdown("<br>",unsafe_allow_html=True)
                 st.markdown("### Customers by risk category")
                 st.markdown("<br>",unsafe_allow_html=True)
-                low = st.number_input('Choose the churn rate for low risk customers', min_value = 0.0, max_value = 1.0, value=0.4)
-                high = st.number_input('Choose the churn rate for high risk customers', min_value = low, max_value = 1.0, value=0.5)
+                low = st.number_input('Choose the churn rate for low risk customers', value=0.4)
+                high = st.number_input('Choose the churn rate for high risk customers', value=0.5)
+                if low < 0:
+                    st.error("Churn rate must be positive",icon="🛑")
+                    quit()
+                elif low == 0:
+                    st.error("Churn rate must be non-zero",icon="🛑")
+                    quit()
+                elif low >= 1 or high >= 1:
+                    st.error("Churn rate must be between 0 and less than 1",icon="🛑")
+                    quit()
+                elif low == high:
+                    st.error("Upper bound for low risk customers must be strictly greater than lower bound for high risk customers",icon="🛑")
+                    quit()
                 low_risk = descending_churn[descending_churn['Churn Rate'] < low]
                 medium_risk = descending_churn[(descending_churn['Churn Rate'] >= low) & (descending_churn['Churn Rate'] < high)]
                 high_risk = descending_churn[descending_churn['Churn Rate'] >= high]
@@ -971,4 +991,4 @@ if data is not None:
 #elif data is not None and is_churn_col:
  #   st.warning("Error: No churn column")
 else:
-    st.warning("No input file")
+    st.info("No input file")
