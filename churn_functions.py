@@ -3,6 +3,7 @@ import streamlit.components.v1 as componentsx
 from pprint import pprint 
 from collections import defaultdict
 import numpy as np
+import math
 import pandas as pd
 import regex as re
 import seaborn as sns
@@ -62,7 +63,11 @@ def clean_data(data, prev, vif_thres, propo_thres, dispro_thres, all_customer_ID
         if var_type == "Numerical":
             if data[variable].dtype == "Object":
                 data[variable].replace('^[0-9]+.?[0-9]+$', np.nan, inplace=True, regex=True)
-            data = data.astype({variable: 'float64'})
+            try:
+                data = data.astype({variable: 'float64'})
+            except:
+                st.error(f"Error: {variable} has non-numerical values within the column.", icon="🛑")
+                quit()
 
 
     # Check for heavily null columns and remove
@@ -313,18 +318,18 @@ def avg_churn(descending_churn, variable, numerical):
         mean_churn = {i: sum_terms[i] / num_terms[i] for i in num_terms}
         dataframe = pd.DataFrame.from_dict(mean_churn, orient='index',columns=[f"Unique vals in {variable}"])
     else:
-        num_terms = {i: 0 for i in range(1, numerical + 1)}     
+        num_terms = {i: 0 for i in range(1, numerical + 1)}    
         sum_terms = {i: 0 for i in range(1, numerical + 1)}
         unique_terms = [float(i) for i in descending_churn[variable].unique().tolist()]
         minimum = min(unique_terms)
         maximum = max(unique_terms)
-        split = (maximum - minimum) / (numerical - 1)
+        split = math.ceil((maximum - minimum) / (numerical))
         subset_range = []
         for i in range(0, numerical):
             if len(subset_range) == 0:
-                subset_range.append((0, split))
+                subset_range.append((minimum, minimum + split))
             else:
-                subset_range.append((subset_range[-1][1], subset_range[-1][1] + split))
+                subset_range.append((subset_range[-1][1] + 0.01, subset_range[-1][1] + split))
         subset_dict = {i: str(subset_range[i - 1]) for i in range(1, numerical + 1)}
         for index, row in descending_churn.iterrows():
             check = row[variable]
@@ -332,11 +337,16 @@ def avg_churn(descending_churn, variable, numerical):
             #if not check.isnumeric():
              #   continue
             for ranges in subset_range:
-                if ranges[0] <= float(check) and ranges[1] > float(check):
+                if ranges[0] <= float(check) and ranges[1] >= float(check):
                     break
                 count += 1
-            num_terms[count] += 1
-            sum_terms[count] += row["Churn Rate"]
+            try:
+                num_terms[count] += 1
+                sum_terms[count] += row["Churn Rate"]
+            except:
+                st.write(check)
+                st.write(subset_range)
+                quit()
         mean_churn = {}
         for i in num_terms:
             try:
@@ -345,5 +355,7 @@ def avg_churn(descending_churn, variable, numerical):
                 avg = 0
             subs_range = str((int(subset_range[i - 1][0]), int(subset_range[i - 1][1])))
             mean_churn.update({subs_range: avg})
+        mean_churn = {k: v for k, v in sorted(mean_churn.items(), key=lambda item: int(item[0].split(",")[0][1:]))}
+        #st.write(mean_churn)
         dataframe = pd.DataFrame.from_dict(mean_churn, orient='index',columns=[f"Ranges in {variable}"])
     return dataframe
