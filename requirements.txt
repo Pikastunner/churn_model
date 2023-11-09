@@ -1,3 +1,4 @@
+re
 numpy
 pandas
 scikit-learn
