@@ -1,4 +1,4 @@
-re
+regex
 numpy
 pandas
 scikit-learn
