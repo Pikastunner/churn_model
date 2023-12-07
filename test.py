@@ -863,7 +863,7 @@ if data is not None:
                 new_data_info = c.clean_data(new_data, False, vif_thres_test, propo_thres_test, dispro_thres_test, new_cust_ID, variable_data_type, customerID, sd_threshold, ordinal_rank, churn)
                 new_data = new_data_info[0]
                 not_scaled = new_data_info[2]
-                churn_col = classifier.predict(new_data[model_by_Anova])
+                churn_col = classifier.predict(new_data[list(model_by_Anova.keys())])
                 new_predict_prob = classifier.predict_proba(new_data[list(model_by_Anova.keys())] )
                 new_data[churn] = churn_col
                 new_most_riskoc = sorted([(i[1], index) for index, i in enumerate(new_predict_prob)], key = lambda x: x[0], reverse=True)
