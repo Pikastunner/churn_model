@@ -792,7 +792,7 @@ if data is not None:
             st.info(f"We use the selected model to make probability predictions of churn for each customer and using this, we can glean stronger insights between churn and the variables", icon="ℹ️") 
 
             classifier = all_classifiers[best_model_i]
-            predict_prob = classifier.predict_proba(list(model_by_Anova.keys()))
+            predict_prob = classifier.predict_proba(data[list(model_by_Anova.keys())])
                                     
             #st.dataframe(data.iloc[most_riskoc.index(max(most_riskoc))])
             st.markdown("<br>",unsafe_allow_html=True)  
