@@ -792,7 +792,7 @@ if data is not None:
             st.info(f"We use the selected model to make probability predictions of churn for each customer and using this, we can glean stronger insights between churn and the variables", icon="ℹ️") 
 
             classifier = all_classifiers[best_model_i]
-            predict_prob = classifier.predict_proba(data[model_by_Anova])
+            predict_prob = classifier.predict_proba(list(model_by_Anova.keys()))
                                     
             #st.dataframe(data.iloc[most_riskoc.index(max(most_riskoc))])
             st.markdown("<br>",unsafe_allow_html=True)  
@@ -864,7 +864,7 @@ if data is not None:
                 new_data = new_data_info[0]
                 not_scaled = new_data_info[2]
                 churn_col = classifier.predict(new_data[model_by_Anova])
-                new_predict_prob = classifier.predict_proba(new_data[model_by_Anova])
+                new_predict_prob = classifier.predict_proba(new_data[list(model_by_Anova.keys())] )
                 new_data[churn] = churn_col
                 new_most_riskoc = sorted([(i[1], index) for index, i in enumerate(new_predict_prob)], key = lambda x: x[0], reverse=True)
                 new_data["Churn Rate"] = [i[0] for i in new_most_riskoc]
